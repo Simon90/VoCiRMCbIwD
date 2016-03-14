@@ -1,0 +1,367 @@
+<!DOCTYPE HTML>
+<html lang="en">
+	<head>
+		<title>VoCiRMCbIwD</title>
+		<meta charset="utf-8">
+		<style>
+		body {
+			background:#666;
+			color:#fff;
+			padding:0;
+			margin:0;
+			overflow:hidden;
+			font-family:sans-serif;
+			text-align:center;
+		}
+		a:link {color: #fff;}
+		a:visited {color: #fff;}
+		a:active {color: #fff;}
+		canvas { pointer-events:none; z-index:10; position:relative; }
+		#info { text-align:left; font: 10px/1.2 Verdana, Arial, Helvetica, Sans-Serif; margin:0.4em 0em 0em 0.4em; z-index:12; position:absolute; display:none; color:#fff; background: #121212; opacity:0.8; border-radius:20px; padding: 32px }
+		#infobutton { text-align:left; margin:0.1em 0em 0em 0.1em; z-index:13; position:absolute; display:block; padding: 8px }
+		</style>
+	</head>
+	
+	<body>
+		<div id="infobutton">
+			<a href="javascript:toggleInfo()"><img src="i.png" width="28" height="28" alt="infobutton"></a>
+		</div>
+		<div id="info">
+				<H3>Visualization of Changes in Running-Motion Caused by Interacting with Devices</H3>
+				</P>
+				The 3D visualization was implemented using <a href="https://github.com/mrdoob/three.js" target="_blank">three.js</a>.
+				<P><B>Note.</B> You need a modern browser that supports WebGL for this to run the way it is intended.<BR>
+				For example: <a href="http://www.google.com/landing/chrome/beta/" target="_blank">Google Chrome 9+</a> or <a href="http://www.mozilla.com/firefox/beta/" target="_blank">Firefox 4+</a>.</P>	
+				<BR> (C) Simon Schoemaker | 2016
+		</div>
+		
+		<!-- ThreeExtras.js - http://github.com/mrdoob/three.js -->
+		<script type="text/javascript" src="js/ThreeExtras.js"></script>
+		
+		<!-- Provides requestAnimationFrame in a cross browser way - http://greggman.com/ -->
+		<script type="text/javascript" src="js/RequestAnimationFrame.js"></script>
+
+		<script type="text/javascript">
+
+			var SCREEN_WIDTH = window.innerWidth;
+			var SCREEN_HEIGHT = window.innerHeight;
+			var FLOOR = -10;
+
+			var container;
+
+			var camera;
+			var scene;
+			var webglRenderer;
+
+			var mesh, zmesh, lightMesh, geometry;
+			
+			var directionalLight, pointLight;
+			
+			var mouseX = 0;
+			var mouseY = 0;
+
+			var windowHalfX = window.innerWidth >> 1;
+			var windowHalfY = window.innerHeight >> 1;
+
+			var render_gl = 1;
+			var has_gl = 0;
+			
+			var cubeRefMesh;
+			var r = 0;
+			
+			var pArray;
+			var matArray;
+			var pointArray;
+			var majorCount = 0;
+			var resCount = 0;
+
+			var started = false;
+			var ready = false;
+
+			var fileArray = ["20150820_Alex0013.txt", "ColourCodes.txt"];
+
+			loadFile(0);	
+			loadColourCodes(1);	
+
+			function Chr(AsciiNum) {
+				return String.fromCharCode(AsciiNum)
+			}
+
+			function loadFile(num) {
+				var file = fileArray[num];
+				var client = new XMLHttpRequest();
+				client.open('GET', file);
+				client.onreadystatechange = function() {
+					if (client.readyState == 4) {
+						parseData(client.responseText);
+					}
+				}
+				client.send();
+			}
+
+			function parseData(data) {
+				var txtArray = data.split("\n");
+				pArray = [];
+				for (var i=0; i<txtArray.length; ++i ) {
+					var tempStr = txtArray[i];
+					var tempArray = tempStr.split(Chr(9));
+					tempArray.shift();
+					tempArray.shift();
+					pArray.push(tempArray);
+				}
+				parseDone();
+			}
+			
+			function loadColourCodes(num) {
+				var file = fileArray[num];
+				var client = new XMLHttpRequest();
+				client.open('GET', file);
+				client.onreadystatechange = function() {
+					if (client.readyState == 4) {
+						parseColourCodes(client.responseText);
+					}
+				}
+				client.send();
+				
+			}
+			
+			function parseColourCodes(data) {
+				var txtArray = data.split("\n");
+
+				cArray = [];
+				for (var i=0; i<txtArray.length; ++i ) {
+					var tempStr = txtArray[i];
+					var tempArray = tempStr.split(Chr(9));
+					cArray.push(tempArray);
+				}
+				ready = true;
+				parseDone();
+			}
+
+			function parseDone() {
+				if(ready) {
+				if (!started) {
+					init(), animate();
+				}
+
+				majorCount = 0;
+				started = true;
+				}
+			}
+
+			function addMesh( geometry, scale, x, y, z, rx, ry, rz, material ) {
+				
+				mesh = new THREE.Mesh( geometry, material );
+				mesh.scale.x = mesh.scale.y = mesh.scale.z = scale;
+				mesh.position.x = x;
+				mesh.position.y = y;
+				mesh.position.z = z;
+				mesh.rotation.x = rx;
+				mesh.rotation.y = ry;
+				mesh.rotation.z = rz;
+				mesh.overdraw = true;
+				mesh.doubleSided = false;
+				mesh.updateMatrix();
+				scene.addObject(mesh);
+
+				return mesh;
+			}
+			
+			function init() {
+
+				container = document.createElement('div');
+				document.body.appendChild(container);
+				
+				var aspect = SCREEN_WIDTH / SCREEN_HEIGHT;
+				
+				// CAMERA
+				
+				camera = new THREE.Camera( 75, aspect, 1, 100000 );
+				camera.position.z = 1200;
+				camera.position.x = 0;
+				camera.position.y = 800;
+				
+				camera.updateMatrix();
+
+				scene = new THREE.Scene();
+
+				// LIGHTS
+
+				var ambient = new THREE.AmbientLight( 0x101010 );
+				scene.addLight( ambient );
+
+				directionalLight = new THREE.DirectionalLight( 0xffffff, 1.0 );
+				directionalLight.position.x = 1;
+				directionalLight.position.y = 1;
+				directionalLight.position.z = 2;
+				directionalLight.position.normalize();
+				scene.addLight( directionalLight );
+
+				pointLight = new THREE.PointLight( 0xffffee );
+				pointLight.position.x = 0;
+				pointLight.position.y = 200;
+				pointLight.position.z = 0;
+				scene.addLight( pointLight );
+				
+				sphere = new Sphere( 40, 16, 8 );
+				
+				cubeRef = new Cube( 0, 0, 0, 0, 0 );
+				cubeRefMesh = addMesh( cubeRef, 1,  0, 0, 0, 0,0,0, new THREE.MeshLambertMaterial( { color: 0x333333 } ) );
+				camera.target = cubeRefMesh;
+				
+				pointArray = [];
+				matArray = [];
+				
+				for (var x=0; x<pArray[majorCount].length; ++x) {
+					console.log(pArray[majorCount].length);
+					var val = x%3;
+					var mat = new THREE.MeshPhongMaterial( { ambient: 0x000000, color: 0xFFFFFF, specular: 0x555555, shininess: 100, shading: THREE.FlatShading } );
+					
+					if (val == 0) {
+						var xx = pArray[majorCount][x];
+						var zz = pArray[majorCount][x+1];
+						var yy = pArray[majorCount][x+2];	
+						matArray.push(mat);
+						var p = addMesh( sphere, 0.25, Number(xx)/2, Number(yy)/2, Number(zz)/2, 0,0,0, mat );
+						
+						pointArray.push(p);
+					}
+				}
+				
+				plane = new Plane( 100, 100, 15, 10 );
+				
+				for(var i=0; i<plane.uvs.length; i++) {
+					var uvs = plane.uvs[i];
+					for ( j = 0, jl = uvs.length; j < jl; j++ ) {
+						uvs[j].u *= 10;
+						uvs[j].v *= 10;
+					}
+					
+				}
+
+				addMesh( plane, 100,  0, FLOOR, 0, -1.57,0,0, getFloorMaterial() );
+
+				try {
+					webglRenderer = new THREE.WebGLRenderer( scene );
+					webglRenderer.setSize( SCREEN_WIDTH, SCREEN_HEIGHT );
+					container.appendChild( webglRenderer.domElement );
+					has_gl = 1;
+				}
+				catch (e) {
+					// need webgl
+					document.getElementById('info').innerHTML = "<P><BR><B>Note.</B> You need a modern browser that supports WebGL for this to run the way it is intended.<BR>For example. <a href='http://www.google.com/landing/chrome/beta/' target='_blank'>Google Chrome 9+</a> or <a href='http://www.mozilla.com/firefox/beta/' target='_blank'>Firefox 4+</a>.</P><CENTER><BR><img src='../general/WebGL_logo.png' border='0'></CENTER>";
+					document.getElementById('info').style.display = "block";
+					return;
+				}
+				
+			}
+
+
+			function getFloorMaterial () {
+				var floorTextureMaterial = new THREE.MeshPhongMaterial( { map: new THREE.Texture(null, THREE.UVMapping, THREE.RepeatWrapping, THREE.RepeatWrapping), ambient: 0xCCCCCC, specular: 0x666666, shininess: 90, shading: THREE.SmoothShading } );
+
+				var img = new Image();
+				floorTextureMaterial.map.image = img;
+				img.onload = function () {
+					floorTextureMaterial.map.image.loaded = 1;
+				};
+				img.src = "grid.png";
+
+				return floorTextureMaterial;
+			}
+
+			function run() {
+				// update
+				var pcount = 0;
+				++majorCount;
+				
+				if (majorCount > pArray.length) {
+					
+					majorCount = 0;
+				}
+				
+				var lng = 0;
+				if (pArray[majorCount] != undefined) {
+					lng = pArray[majorCount].length;
+				}
+
+				for (var x=0; x<lng; ++x) {
+					var val = x%3;
+					if (val == 0) {
+						var xx = pArray[majorCount][x];
+						var zz = pArray[majorCount][x+1];
+						var yy = pArray[majorCount][x+2];	
+						
+						var pmesh = pointArray[pcount];
+						
+						if (pmesh != undefined) {
+							pmesh.position.x = Number(xx)/2;
+							pmesh.position.y = Number(yy)/2;
+							pmesh.position.z = Number(zz)/2;
+							
+						}
+						var mat = matArray[pcount];
+						setColor(majorCount,pcount,mat);
+						++pcount;
+					}
+				}
+			}
+
+			function animate() {
+				requestAnimationFrame( animate );
+				loop();
+			}
+
+			function loop() {
+				var timer = Date.now() * 0.0001;
+
+				camera.position.x = Math.cos( timer ) * 2500;
+				camera.position.z = Math.sin( timer ) * 2500;
+				
+				++resCount;
+					
+				if (resCount%2 == 0) {
+					run();
+				}
+
+				pointLight.position.x = Math.cos( timer ) * 2500;
+				pointLight.position.z = Math.sin( timer ) * 2500;
+				
+				if ( render_gl && has_gl ) webglRenderer.render( scene , camera );
+
+			}
+			
+			function setColor(x, y, mat) {
+				var value = cArray[x][y];
+				//0xffffff,0xffdb6c,0xffac31,0xff7408,0xff0000
+				
+				if (value == 0) {
+					mat.color.setHex(0xffffff);	
+				}
+				else if (value == 1) {
+					mat.color.setHex(0xffdb6c);
+				}
+				else if (value == 2) {
+					mat.color.setHex(0xffac31);
+				}
+				else if (value == 3) {
+					mat.color.setHex(0xff7408);
+				}
+				else if (value == 4) {
+					mat.color.setHex(0xff0000);
+				}
+			}
+			
+			function toggleInfo() {
+				if (document.getElementById('info').style.display == "block") {
+					document.getElementById('info').style.display = "none";
+				} else {
+					document.getElementById('info').style.display = "block";
+				}
+			}
+
+
+		</script>
+
+	</body>
+</html>
